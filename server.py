@@ -20,8 +20,9 @@ app.add_middleware(
 
 
 @app.post("/ask")
-async def ask(query: str = Form(...), file: UploadFile = None):
+async def ask(query: str = Form(...), file: UploadFile = None, user_id: str = Form(...)):
     user_file_text = None
+    print(f"📝 Received query: {query}, 👤 user_id: {user_id} 🚀")
     if file:
         contents = await file.read()
         temp_path = f"/tmp/{file.filename}"
@@ -29,9 +30,10 @@ async def ask(query: str = Form(...), file: UploadFile = None):
             f.write(contents)
         user_file_text = read_file(temp_path)
         os.remove(temp_path)
+    
 
     async def stream_generator() -> AsyncGenerator[str, None]:
-        async for chunk in answer_query(query, user_file_text, user_id=123):
+        async for chunk in answer_query(query, user_file_text, user_id):
             yield chunk
 
     return StreamingResponse(stream_generator(), media_type="text/plain")
