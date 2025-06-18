@@ -8,8 +8,12 @@ from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 from groq import Groq
 import asyncio
+from dotenv import load_dotenv
 
 # === Configs ===
+load_dotenv(dotenv_path="/app/.env")
+api_key = os.getenv("API_KEY")
+print("🔑 Using", api_key)
 EMBEDDING_DIR = "embeddings"
 os.makedirs(EMBEDDING_DIR, exist_ok=True)
 
@@ -17,7 +21,7 @@ BASE_INDEX_PATH = os.path.join(EMBEDDING_DIR, "base.index")
 BASE_EMBEDDINGS_PATH = os.path.join(EMBEDDING_DIR, "base_embeddings.npy")
 BASE_CHUNKS_PATH = os.path.join(EMBEDDING_DIR, "base_chunks.json")
 
-groq_client = Groq(api_key="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")
+groq_client = Groq(api_key=api_key)
 
 # === Model Init ===
 print("🧠 Loading SentenceTransformer model...")
@@ -142,7 +146,11 @@ def load_user_index(user_id):
     paths = get_user_embedding_paths(user_id)
     if not user_data_exists(user_id):
         print(f"⚠️ No embedding data found for user {user_id}")
-        return None, [], np.empty((0, model.get_sentence_embedding_dimension()), dtype=np.float32)
+        return (
+            None,
+            [],
+            np.empty((0, model.get_sentence_embedding_dimension()), dtype=np.float32),
+        )
 
     print(f"💾 Loading FAISS index and embeddings for user {user_id}...")
     index = faiss.read_index(paths["index_path"])
@@ -277,7 +285,9 @@ def mmr(
     return selected
 
 
-def search_combined_mmr(user_query, user_id=None, user_file_content=None, top_k=5, lambda_param=0.7):
+def search_combined_mmr(
+    user_query, user_id=None, user_file_content=None, top_k=5, lambda_param=0.7
+):
     print(f"🔍 Performing MMR search for query: '{user_query}'")
     query_emb = model.encode([user_query])
     faiss.normalize_L2(query_emb)
@@ -392,7 +402,9 @@ async def answer_query(user_query, user_file_text=None, user_id=None):
         add_user_content(user_id, user_file_text)
 
     # Search combined base + user-specific embeddings
-    chunks = search_combined_mmr(user_query, user_id=user_id, user_file_content=None, top_k=10)
+    chunks = search_combined_mmr(
+        user_query, user_id=user_id, user_file_content=None, top_k=10
+    )
 
     if not chunks:
         print("⚠️ No relevant content found for query.")

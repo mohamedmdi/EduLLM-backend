@@ -10,3 +10,4 @@ openpyxl
 httpx
 pymupdf
 python-docx
+python-dotenv
