@@ -9,6 +9,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 from groq import Groq
 import asyncio
 from dotenv import load_dotenv
+import hashlib
 
 # === Configs ===
 load_dotenv(dotenv_path="/app/.env")
@@ -27,6 +28,10 @@ groq_client = Groq(api_key=api_key)
 print("🧠 Loading SentenceTransformer model...")
 model = SentenceTransformer("all-mpnet-base-v2")
 print("✅ Model loaded.\n")
+
+
+def compute_sha256(text):
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 # === File Reader ===
@@ -176,22 +181,75 @@ def initialize_user_index(dim):
     return index, [], np.empty((0, dim), dtype=np.float32)
 
 
-def augment_user_index(user_id, new_chunks, new_embeddings):
-    print(f"📊 Augmenting user {user_id} FAISS index with new data...")
+def augment_user_index(user_id, new_wrapped_chunks, new_embeddings):
+    print(f"📊 Augmenting user {user_id} FAISS index...")
     if user_data_exists(user_id):
         index, old_chunks, old_embeddings = load_user_index(user_id)
     else:
-        print(f"⚠️ User {user_id} index not found. Initializing a new one.")
         index, old_chunks, old_embeddings = initialize_user_index(
             new_embeddings.shape[1]
         )
 
     index.add(new_embeddings)
-    all_chunks = old_chunks + new_chunks
+    all_chunks = old_chunks + new_wrapped_chunks
     all_embeddings = np.vstack([old_embeddings, new_embeddings])
 
     save_user_index(user_id, index, all_chunks, all_embeddings)
-    print(f"✅ Augmented user {user_id} index with {len(new_chunks)} new chunks.")
+
+
+def list_user_files(user_id: str) -> dict:
+    try:
+        if not user_data_exists(user_id):
+            raise FileNotFoundError(f"No data found for user '{user_id}'.")
+
+        _, chunks, _ = load_user_index(user_id)
+
+        file_map = {}
+        for chunk in chunks:
+            h = chunk.get("hash")
+            if h not in file_map:
+                file_map[h] = {"file": chunk.get("file", "unknown"), "hash": h}
+
+        return {"success": True, "files": list(file_map.values())}
+
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+
+def delete_user_file_embeddings(user_id: str, file_hash: str) -> dict:
+    try:
+        if not user_data_exists(user_id):
+            raise FileNotFoundError(f"No data found for user '{user_id}'.")
+
+        index, chunks, embeddings = load_user_index(user_id)
+
+        new_chunks = []
+        new_embeddings = []
+
+        for i, chunk in enumerate(chunks):
+            if chunk.get("hash") != file_hash:
+                new_chunks.append(chunk)
+                new_embeddings.append(embeddings[i])
+
+        if len(new_chunks) == len(chunks):
+            raise ValueError(
+                f"No file with hash '{file_hash}' found for user '{user_id}'."
+            )
+
+        if new_embeddings:
+            new_embeddings = np.stack(new_embeddings)
+            index = faiss.IndexFlatL2(new_embeddings.shape[1])
+            index.add(new_embeddings)
+        else:
+            index, new_chunks, new_embeddings = initialize_user_index(
+                embeddings.shape[1]
+            )
+
+        save_user_index(user_id, index, new_chunks, new_embeddings)
+        return {"success": True, "message": "File deleted successfully."}
+
+    except Exception as e:
+        return {"success": False, "message": str(e)}
 
 
 # === Caching user embeddings in memory (optional) ===
@@ -339,17 +397,29 @@ def search_combined_mmr(
 
 
 # === API for user to add content and save embeddings ===
-def add_user_content(user_id, user_file_content):
-    """
-    Add user content to the user's personal embedding store on disk,
-    augmenting their FAISS index and saving chunks/embeddings.
-    """
-    print(f"➕ Adding content for user {user_id}...")
-    chunks = chunk_text(user_file_content)
+def add_user_content(user_id, file_content, file_name):
+    print(f"➕ Adding content from {file_name} for user {user_id}...")
+
+    file_hash = compute_sha256(file_content)
+
+    # Load existing user chunks
+    _, existing_chunks, _ = load_user_index(user_id)
+
+    # Deduplication check
+    existing_hashes = {chunk.get("hash") for chunk in existing_chunks}
+    if file_hash in existing_hashes:
+        print(f"⚠️ File {file_name} already embedded. Skipping.")
+        return
+
+    # Process and embed
+    chunks = chunk_text(file_content)
+    wrapped_chunks = [
+        {"file": file_name, "text": chunk, "hash": file_hash} for chunk in chunks
+    ]
     embeddings = embed_chunks(chunks)
 
-    # Augment user index on disk
-    augment_user_index(user_id, chunks, embeddings)
+    # Save
+    augment_user_index(user_id, wrapped_chunks, embeddings)
 
 
 # === Query-Focused Summarization ===
@@ -390,7 +460,7 @@ async def query_llm(prompt, model_name="meta-llama/llama-4-scout-17b-16e-instruc
 
 
 # === RAG Workflow ===
-async def answer_query(user_query, user_file_text=None, user_id=None):
+async def answer_query(user_query, user_file_text=None, user_id=None, file_name=None):
     """
     Answer query using base index + user-specific index (if user_id),
     and optionally augment user embeddings if user_file_text provided.
@@ -399,11 +469,11 @@ async def answer_query(user_query, user_file_text=None, user_id=None):
 
     # If user_file_text is given without user_id, just cache in memory (or ignore)
     if user_id and user_file_text:
-        add_user_content(user_id, user_file_text)
+        add_user_content(user_id, user_file_text, file_name)
 
     # Search combined base + user-specific embeddings
     chunks = search_combined_mmr(
-        user_query, user_id=user_id, user_file_content=None, top_k=10
+        user_query, user_id=user_id, user_file_content=user_file_text, top_k=10
     )
 
     if not chunks:
@@ -412,7 +482,9 @@ async def answer_query(user_query, user_file_text=None, user_id=None):
         return
 
     print(f"🔍 Found {len(chunks)} relevant chunks. Preparing prompt...")
-    context = "\n\n".join(chunks)
+    context = "\n\n".join(
+        chunk["content"] if isinstance(chunk, dict) else chunk for chunk in chunks
+    )
 
     prompt = f"""Use the following context to answer the question as precisely as possible:
 
