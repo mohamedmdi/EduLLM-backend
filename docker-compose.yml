@@ -1,0 +1,10 @@
+services:
+  edullm-backend:
+    build: .
+    volumes:
+      - .:/app  # This volume syncs your local code with the container
+    ports:
+      - "8000:8000"  # Expose the FastAPI app on port 8000
+    environment:
+      - PYTHONUNBUFFERED=1  # Keep output from Python (useful for debugging)
+    restart: always

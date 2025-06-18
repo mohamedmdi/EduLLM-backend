@@ -1,0 +1,53 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*.so
+
+# Virtual environments
+venv/
+env/
+.venv/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+# Environment variables
+.env
+.env.*
+
+# Logs and debug
+*.log
+logs/
+*.cache
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# IDE/editor folders
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# Build and dist
+build/
+dist/
+out/
+
+
+# Embeddings and data outputs
+embeddings/
+data/
+*.npy
+*.index
+*.json
+
+# Misc
+coverage/
+*.local
+
+# Shortcuts and docs
+*.lnk
+*.pdf
+*.docx
