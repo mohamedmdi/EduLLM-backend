@@ -460,31 +460,37 @@ async def query_llm(prompt, model_name="meta-llama/llama-4-scout-17b-16e-instruc
 
 
 # === RAG Workflow ===
-async def answer_query(user_query, user_file_text=None, user_id=None, file_name=None):
+async def answer_query(user_query, user_file_texts=None, user_id=None, filenames=None):
     """
     Answer query using base index + user-specific index (if user_id),
-    and optionally augment user embeddings if user_file_text provided.
+    and optionally augment user embeddings if user_file_texts provided.
+    user_file_texts: list of file contents (one per file)
+    filenames: list of file names (one per file)
     """
     print(f"🤖 Answering query: '{user_query}'")
 
-    # If user_file_text is given without user_id, just cache in memory (or ignore)
-    if user_id and user_file_text:
-        add_user_content(user_id, user_file_text, file_name)
+    # If file texts provided and user_id, add each to user index
+    if user_id and user_file_texts and filenames:
+        for file_content, file_name in zip(user_file_texts, filenames):
+            add_user_content(user_id, file_content, file_name)
 
-    # Search combined base + user-specific embeddings
-    chunks = search_combined_mmr(
-        user_query, user_id=user_id, user_file_content=user_file_text, top_k=10
-    )
+    # Search base + user-specific index (no raw text passed here)
+    chunks = search_combined_mmr(user_query, user_id=user_id, top_k=10)
 
     if not chunks:
-        print("⚠️ No relevant content found for query.")
-        yield "⚠️ No relevant content found."
+        yield "No relevant information found.\n"
         return
 
     print(f"🔍 Found {len(chunks)} relevant chunks. Preparing prompt...")
-    context = "\n\n".join(
-        chunk["content"] if isinstance(chunk, dict) else chunk for chunk in chunks
-    )
+
+    valid_texts = []
+    for chunk in chunks:
+        if isinstance(chunk, dict) and "text" in chunk:
+            valid_texts.append(chunk["text"])
+        else:
+            valid_texts.append(str(chunk))
+
+    context = "\n\n".join(valid_texts)
 
     prompt = f"""Use the following context to answer the question as precisely as possible:
 

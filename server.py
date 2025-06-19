@@ -26,21 +26,26 @@ app.add_middleware(
 
 @app.post("/ask")
 async def ask(
-    query: str = Form(...), file: UploadFile = None, user_id: str = Form(...)
+    query: str = Form(...),
+    file: list[UploadFile] = Form(None),
+    user_id: str = Form(...),
 ):
-    user_file_text = None
-    print(f"📝 Received query: {query}, 👤 user_id: {user_id} 🚀")
+    print(f"📝 Received query: {query}, 👤 user_id: {user_id} 🚀, Files: {file}")
+
+    user_file_texts = []
+    filenames = []
     if file:
-        contents = await file.read()
-        temp_path = f"/tmp/{file.filename}"
-        with open(temp_path, "wb") as f:
-            f.write(contents)
-        user_file_text = read_file(temp_path)
-        os.remove(temp_path)
+        for f in file:
+            contents = await f.read()
+            temp_path = f"/tmp/{f.filename}"
+            with open(temp_path, "wb") as out:
+                out.write(contents)
+            user_file_texts.append(read_file(temp_path))
+            filenames.append(f.filename)
+            os.remove(temp_path)
 
     async def stream_generator():
-        filename = file.filename if file else None
-        async for chunk in answer_query(query, user_file_text, user_id, filename):
+        async for chunk in answer_query(query, user_file_texts, user_id, filenames):
             yield chunk
 
     return StreamingResponse(stream_generator(), media_type="text/plain")
@@ -53,7 +58,7 @@ async def hello():
 
 
 @app.delete("/delete_file")
-async def delete_file(user_id: str = Body(...), file_hash: str = Body(...)):
+async def delete_file(user_id: str = Query(...), file_hash: str = Query(...)):
     result = delete_user_file_embeddings(user_id, file_hash)
     if not result["success"]:
         raise HTTPException(status_code=404, detail=result["message"])
