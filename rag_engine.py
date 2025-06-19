@@ -200,7 +200,7 @@ def augment_user_index(user_id, new_wrapped_chunks, new_embeddings):
 def list_user_files(user_id: str) -> dict:
     try:
         if not user_data_exists(user_id):
-            raise FileNotFoundError(f"No data found for user '{user_id}'.")
+            return {"success": True, "files": [], "message": "No data found for user."}
 
         _, chunks, _ = load_user_index(user_id)
 
@@ -502,3 +502,4 @@ Answer:"""
     print("🧠 Sending prompt to LLM...")
     async for part in query_llm(prompt):
         yield part
+    print("✅ LLM response received.")
