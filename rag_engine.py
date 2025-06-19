@@ -505,7 +505,7 @@ Answer:"""
     print("✅ LLM response received.")
 
 
-async def get_topics_from_saved_embeddings(user_id: str, top_k: int = 10, final_topic_count: int = 5):
+async def get_topics_from_saved_embeddings(user_id: str, top_k: int = 10, final_topic_count: int = 4):
     """
     Retrieve a concise list of representative topic labels from a user's saved embeddings.
 

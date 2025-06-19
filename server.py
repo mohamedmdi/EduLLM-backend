@@ -108,8 +108,7 @@ def search_topics(topics):
 
 @app.get("/search")
 async def get_topics_from_embeddings(user_id: str = Query(...)):
-    """raw_topics = await get_topics_from_saved_embeddings(user_id)"""
-    raw_topics = ["Big Data", "Machine Learning"]
+    raw_topics = await get_topics_from_saved_embeddings(user_id)
 
     if not raw_topics:
         return {"topics": [], "search_results": {}}
