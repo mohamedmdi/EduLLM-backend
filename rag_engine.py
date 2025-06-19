@@ -503,3 +503,61 @@ Answer:"""
     async for part in query_llm(prompt):
         yield part
     print("✅ LLM response received.")
+
+
+async def get_topics_from_saved_embeddings(user_id: str, top_k: int = 10, final_topic_count: int = 5):
+    """
+    Retrieve a concise list of representative topic labels from a user's saved embeddings.
+
+    Args:
+        user_id (str): The user's identifier.
+        top_k (int): Number of diverse chunks to retrieve for topic extraction.
+        final_topic_count (int): Maximum number of final topic labels to return.
+
+    Returns:
+        List[str]: Compact list of user-specific topic labels.
+    """
+    print(f"📚 Extracting topics for user {user_id}...")
+
+    if not user_data_exists(user_id):
+        print(f"⚠️ No data found for user {user_id}.")
+        return []
+
+    _, chunks, embeddings = load_user_index(user_id)
+
+    raw_chunks = [
+        c["text"] if isinstance(c, dict) and "text" in c else str(c)
+        for c in chunks
+    ]
+
+    faiss.normalize_L2(embeddings)
+    avg_query_emb = np.mean(embeddings, axis=0, keepdims=True)
+
+    selected_chunks = mmr(
+        avg_query_emb, embeddings, raw_chunks, top_k=top_k, lambda_param=0.5
+    )
+
+    context = "\n\n".join(selected_chunks)
+
+    prompt = f"""Given the following text chunks from a user's saved files, identify up to {final_topic_count} concise topic labels that best represent the content. Return only a string without any additional info nor numbers.
+
+Text Chunks:
+{context}
+
+Topic labels:"""
+
+    print("🧠 Sending topic extraction prompt to LLM...")
+    output = ""
+    async for part in query_llm(prompt):
+        output += part
+
+    # Postprocess: extract bullet points
+    topics = [
+        line.strip("•- ").strip()
+        for line in output.splitlines()
+        if line.strip() and any(c.isalpha() for c in line)
+    ][:final_topic_count]
+
+    print(f"✅ Extracted {len(topics)} topics.")
+    return topics
+

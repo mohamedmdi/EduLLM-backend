@@ -6,11 +6,15 @@ from rag_engine import (
     read_file,
     list_user_files,
     delete_user_file_embeddings,
+    get_topics_from_saved_embeddings,
 )
 import os
 import asyncio
 from fastapi.responses import StreamingResponse
 from typing import AsyncGenerator
+import requests
+import json
+
 
 app = FastAPI()
 
@@ -71,3 +75,49 @@ async def get_user_files(user_id: str = Query(...)):
     if not result["success"]:
         raise HTTPException(status_code=404, detail=result["message"])
     return result
+
+
+def search_web(topic):
+    print(f"Api key for SerpApi: {os.getenv('SERPAPI_KEY')}")
+    url = "https://google.serper.dev/search"
+
+    payload = json.dumps(
+        {
+            "q": "des resources et vidéos pour: " + topic,
+            "num": 4,
+            "location": "Morocco",
+            "gl": "ma",
+            "hl": "fr",
+        }
+    )
+    headers = {
+        "X-API-KEY": os.getenv("SERPAPI_KEY"),
+        "Content-Type": "application/json",
+    }
+
+    response = requests.request("POST", url, headers=headers, data=payload)
+    return [
+        {"title": r["title"], "link": r["link"], "snippet": r["snippet"]}
+        for r in response.json().get("organic", [])
+    ]
+
+
+def search_topics(topics):
+    return {topic: search_web(topic) for topic in topics}
+
+
+@app.get("/search")
+async def get_topics_from_embeddings(user_id: str = Query(...)):
+    """raw_topics = await get_topics_from_saved_embeddings(user_id)"""
+    raw_topics = ["Big Data", "Machine Learning"]
+
+    if not raw_topics:
+        return {"topics": [], "search_results": {}}
+
+    # Split comma-separated topics string into individual topics
+    topics = []
+    for t in raw_topics:
+        topics.extend([s.strip() for s in t.split(",")])
+
+    results = search_topics(topics)
+    return {"topics": topics, "search_results": results}
