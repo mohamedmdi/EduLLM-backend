@@ -14,7 +14,9 @@ import hashlib
 # === Configs ===
 load_dotenv(dotenv_path="/app/.env")
 api_key = os.getenv("API_KEY")
-print("🔑 Using", api_key)
+model_name = os.getenv("MODEL_NAME", "meta-llama/llama-4-scout-17b-16e-instruct")  # Default fallback
+print("🔑 Using API Key:", api_key)
+print("🤖 Using Model:", model_name)
 EMBEDDING_DIR = "embeddings"
 os.makedirs(EMBEDDING_DIR, exist_ok=True)
 
@@ -443,13 +445,17 @@ def summarize_chunk(chunk, user_query, max_sentences=2, max_sentences_to_conside
 
 
 # === Groq Streaming ===
-async def query_llm(prompt, model_name="meta-llama/llama-4-scout-17b-16e-instruct"):
+async def query_llm(prompt, model_name=None):
+    # Use the global model_name from env if not provided
+    if model_name is None:
+        model_name = globals().get("model_name", "meta-llama/llama-4-scout-17b-16e-instruct")
+    
     try:
         chat_completion = groq_client.chat.completions.create(
             messages=[{"role": "user", "content": prompt}],
             model=model_name,
             stream=True,
-            temperature=1,
+            temperature=0.6,
         )
         for chunk in chat_completion:
             delta = chunk.choices[0].delta
@@ -492,7 +498,20 @@ async def answer_query(user_query, user_file_texts=None, user_id=None, filenames
 
     context = "\n\n".join(valid_texts)
 
-    prompt = f"""Use the following context to answer the question as precisely as possible:
+    prompt = f"""Tu es EduLLM, un assistant pédagogique intelligent conçu pour aider les étudiants du programme universitaire à comprendre les concepts. Tu utilises exclusivement les documents fournis par l'utilisateur comme source d'information (via RAG).
+
+L'utilisateur peut interagir avec toi en français, en anglais ou en arabe — détecte la langue automatiquement et réponds dans cette même langue.
+
+Ta mission :
+
+Réponds de manière claire, structurée et pédagogique.
+
+Simplifie les notions complexes en les expliquant avec des exemples concrets ou des analogies quand c'est utile.
+
+Si l'information n'est pas disponible dans les documents, indique-le poliment sans inventer.
+
+Adapte la profondeur de la réponse au contexte (question courte, quiz, résumé, etc.).
+    Use the following context to answer the question as precisely as possible:
 
 {context}
 

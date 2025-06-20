@@ -84,10 +84,10 @@ def search_web(topic):
     payload = json.dumps(
         {
             "q": "des resources et vidéos pour: " + topic,
-            "num": 4,
+            "num": 5,
             "location": "Morocco",
             "gl": "ma",
-            "hl": "fr",
+            "hl": "fr"
         }
     )
     headers = {
