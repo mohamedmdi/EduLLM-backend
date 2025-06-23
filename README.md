@@ -57,7 +57,7 @@ EduLLM-backend/
    ```bash
    # Create a .env file with the following variables:
    SERPAPI_KEY=your_serpapi_key_here
-   OPENAI_API_KEY=your_openai_api_key_here
+   GROQ_API_KEY=your_groq_api_key_here
    ```
 
 4. **Run the server**
