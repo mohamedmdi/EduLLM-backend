@@ -172,7 +172,7 @@ GET /search?user_id={user_id}
 | Variable | Description | Required |
 |----------|-------------|----------|
 | `SERPAPI_KEY` | API key for web search functionality | Yes |
-| `OPENAI_API_KEY` | OpenAI API key for LLM operations | Yes |
+| `GROQ_API_KEY` | GROQ API key for LLM operations | Yes |
 | `HOST` | Server host (default: 0.0.0.0) | No |
 | `PORT` | Server port (default: 8000) | No |
 
